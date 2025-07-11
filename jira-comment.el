@@ -3,6 +3,8 @@
 (eval-when-compile
   (require 'rx))
 
+(require 'jira-users)
+
 (defvar-local jira-comment--callback nil
   "The callback function to call after adding a comment.")
 
@@ -52,8 +54,46 @@
     (,(rx bol "h6. " (*? not-newline) eol)
      . 'jira-face-h6)))
 
+(defun jira-comment-insert-mention (user)
+  "Insert a mention for USER."
+  (interactive
+   (list (completing-read "Mention user: " jira-users)))
+  (let ((user-id (gethash user jira-users)))
+    (insert (propertize (format "[~%s]" user)
+                        'jira-mention-id user-id
+                        'rear-nonsticky '(jira-mention-id)))))
+
+(defun jira-comment--for-each-property-region (f prop)
+  "Call F on every region of the current buffer where PROP is set.
+
+F is called with three arguments: (F start end value)."
+  (if-let ((p (if (get-char-property (point-min) prop)
+                  (point-min)
+                (next-single-property-change (point-min)
+                                             prop))))
+      (while (< p (point-max))
+        (let ((end (next-single-property-change p
+                                                prop
+                                                nil
+                                                (point-max)))
+              (val (get-char-property p prop)))
+          (funcall f p end val)
+          (setq p (next-single-property-change end
+                                               prop
+                                               nil
+                                               (point-max)))))))
+
 (defun jira-comment-format-buffer ()
   "Convert the current buffer to Confluence Wiki Markup and return it as a string."
+  ;; convert mentions into ID references
+  (save-excursion
+    (jira-comment--for-each-property-region
+     #'(lambda (mention-start mention-end account-id)
+         (delete-region mention-start mention-end)
+         (goto-char mention-start)
+         (insert (format "[~accountid:%s]" account-id)))
+     'jira-mention-id))
+
   ;; convert `...` into {{...}}. Jira doesn't accept backticks, but
   ;; for compatibility the web editor does this substitution.
   (save-excursion
@@ -107,6 +147,7 @@
                   (funcall jira-comment--callback)))
     (define-key map (kbd "C-c C-k")
                 (lambda () (interactive) (kill-buffer buf)))
+    (define-key map (kbd "C-c m") 'jira-comment-insert-mention)
     (set-buffer-modified-p nil)
     (use-local-map map)))
 
