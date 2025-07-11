@@ -52,6 +52,42 @@
     (,(rx bol "h6. " (*? not-newline) eol)
      . 'jira-face-h6)))
 
+(defun jira-comment-format-buffer ()
+  "Convert the current buffer to Confluence Wiki Markup and return it as a string."
+  ;; convert `...` into {{...}}. Jira doesn't accept backticks, but
+  ;; for compatibility the web editor does this substitution.
+  (save-excursion
+    (goto-char (point-min))
+    (named-let search ((bracket-level 0)
+                       (backtick-start nil))
+      (when (re-search-forward (rx (or "`"
+                                       "{{"
+                                       "}}"))
+                               nil
+                               t)
+        (pcase (char-before)
+          (?`
+           (cond ((> bracket-level 0)
+                  (search bracket-level nil))
+                 (backtick-start
+                  (let ((s (buffer-substring backtick-start (1- (point)))))
+                    (delete-region (1- backtick-start)
+                                   (point))
+                    (insert (format "{{%s}}" s))
+                    (search bracket-level nil)))
+                 (t
+                  (search bracket-level (point)))))
+          (?{
+           (search (if backtick-start
+                       bracket-level
+                     (1+ bracket-level))
+                   backtick-start))
+          (?}
+           (search (1- bracket-level)
+                   backtick-start))))))
+
+  (buffer-substring (point-min) (point-max)))
+
 (define-derived-mode jira-comment-mode text-mode
   "Jira Comment"
   "Major mode for writing Jira comments."
@@ -85,7 +121,7 @@
       (jira-comment-mode)
       (setq jira-comment--callback
             (lambda ()
-              (let ((content (buffer-string)))
+              (let ((content (jira-comment-format-buffer)))
                 (kill-buffer buf)
                 (funcall save-callback
 		         (string-trim (string-remove-prefix instructions content))))))
