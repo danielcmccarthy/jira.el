@@ -155,6 +155,7 @@
      "\n")))
 
 (defun jira-doc--format-media-block (block)
+  "Format BLOCK, a mediaSingle or mediaGroup node, to a string."
   (let ((media (mapcar (lambda (b)
                          (let* ((attrs (alist-get 'attrs b))
                                 (type (alist-get 'type attrs))
@@ -173,6 +174,34 @@
   (concat
    "\n"
    (string-join media "\n"))))
+
+(defun jira-doc--format-table-row (block)
+  (mapcar #'jira-doc--format-content-block
+          (alist-get 'content block)))
+
+(defun jira-doc--format-table (block)
+  "Format BLOCK, a table node, as a string."
+  (let* ((rows (mapcar #'jira-doc--format-table-row (alist-get 'content block)))
+         (widths (apply #'cl-mapcar
+                        (lambda (&rest col)
+                          (apply #'max (mapcar #'length col)))
+                        rows))
+         (header (car rows))
+         (body (cdr rows))
+         (format-row (lambda (row)
+                       (string-join (cl-mapcar #'string-pad
+                                               row
+                                               widths)
+                                    "│"))))
+    (concat
+     "\n"
+     (string-join `(,(funcall format-row header)
+                    ,(mapconcat (lambda (w) (make-string w ?─))
+                                widths
+                                "┼")
+                    ,@(mapcar format-row body))
+                  "\n")
+     "\n")))
 
 (defun jira-doc--format-content-block(block)
   "Format content BLOCK to a string."
@@ -196,7 +225,7 @@
             sep))))
     (cond
      ((string= type "table")
-      "\n<TABLES NOT SUPPORTED BY jira.el>\n")
+      (jira-doc--format-table block))
      ((or (string= type "mediaGroup")
           (string= type "mediaSingle"))
       (jira-doc--format-media-block block))
