@@ -32,6 +32,7 @@
 
 (require 'cl-lib)
 (require 'vtable)
+(require 'seq)
 (require 'jira-fmt)
 (require 'jira-api)
 
@@ -182,13 +183,24 @@
 
 (defun jira-doc--format-table (block)
   "Format BLOCK, a table node, as a string."
-  (let* ((rows (mapcar #'jira-doc--format-table-row (alist-get 'content block)))
+  (let* ((rows (alist-get 'content block))
+         (header (seq-find (lambda (r)
+                             (seq-every-p (lambda (c)
+                                            (string= "tableHeader"
+                                                     (alist-get 'type c)))
+                                          (alist-get 'content r)))
+                           rows))
+         (body (if header
+                   (remove header rows)
+                 rows))
+         (header (jira-doc--format-table-row header))
+         (body (mapcar #'jira-doc--format-table-row body))
          (widths (apply #'cl-mapcar
                         (lambda (&rest col)
                           (apply #'max (mapcar #'length col)))
-                        rows))
-         (header (car rows))
-         (body (cdr rows))
+                        (if header
+                            (cons header body)
+                          body)))
          (table (make-vtable :objects body
                              :columns
                              (cl-mapcar (lambda (name width)
