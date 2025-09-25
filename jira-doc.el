@@ -31,6 +31,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'vtable)
 (require 'jira-fmt)
 (require 'jira-api)
 
@@ -188,20 +189,26 @@
                         rows))
          (header (car rows))
          (body (cdr rows))
-         (format-row (lambda (row)
-                       (string-join (cl-mapcar #'string-pad
-                                               row
-                                               widths)
-                                    "│"))))
-    (concat
-     "\n"
-     (string-join `(,(funcall format-row header)
-                    ,(mapconcat (lambda (w) (make-string w ?─))
-                                widths
-                                "┼")
-                    ,@(mapcar format-row body))
-                  "\n")
-     "\n")))
+         (table (make-vtable :objects body
+                             :columns
+                             (cl-mapcar (lambda (name width)
+                                          (list :name name
+                                                :width width))
+                                        header
+                                        widths)
+                             :use-header-line nil
+                             ;; Prefer the user's default font over
+                             ;; `vtable' in GUI frames. In TTY frames
+                             ;; that causes weirdly wide spacing
+                             ;; however, so use `vtable' there.
+                             :face (if (display-graphic-p) nil 'vtable)
+                             ;; columns aren't separated at all on TTY frames?
+                             :divider-width (if (display-graphic-p) 0 1)
+                             :insert nil)))
+    (concat "\n"
+            (with-temp-buffer
+              (vtable-insert table)
+              (buffer-string)))))
 
 (defun jira-doc--format-content-block(block)
   "Format content BLOCK to a string."
