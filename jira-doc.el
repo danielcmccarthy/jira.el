@@ -190,9 +190,7 @@
                                                      (alist-get 'type c)))
                                           (alist-get 'content r)))
                            rows))
-         (body (if header
-                   (remove header rows)
-                 rows))
+         (body (remove header rows))
          (header (jira-doc--format-table-row header))
          (body (mapcar #'jira-doc--format-table-row body))
          (widths (apply #'cl-mapcar
